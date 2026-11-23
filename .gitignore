@@ -1,0 +1,41 @@
+# Environment & Secrets (Keep .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Go Binaries & Compilations (must start with / to protect internal/server/)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/server
+/main
+/app
+bin/
+dist/
+
+# Test & Code Coverage Artifacts
+cov
+cov.*
+coverage
+coverage.*
+*.out
+*.test
+*.prof
+
+# Dependencies
+vendor/
+
+# SonarQube & CI caches
+.scannerwork/
+
+# IDE, Editors & OS Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

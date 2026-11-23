@@ -1,0 +1,305 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Delcom Blog REST API",
+    "description": "Dokumentasi RESTful API Backend Delcom Blog — Aplikasi Blog Multi-Tier & AI Generator dengan Integrasi Search Engine.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Delcom - Labs"
+    }
+  },
+  "host": "",
+  "basePath": "/",
+  "schemes": ["http", "https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Format token: Bearer <token_jwt>"
+    }
+  },
+  "paths": {
+    "/api/public/categories": {
+      "get": {
+        "tags": ["Public"],
+        "summary": "Daftar Kategori Artikel Publik",
+        "responses": {
+          "200": { "description": "Daftar kategori berhasil dimuat" }
+        }
+      }
+    },
+    "/api/public/posts": {
+      "get": {
+        "tags": ["Public"],
+        "summary": "Daftar Artikel Terbit Publik",
+        "parameters": [
+          { "name": "q", "in": "query", "type": "string", "description": "Kata kunci pencarian" },
+          { "name": "category", "in": "query", "type": "string", "description": "Filter kategori" }
+        ],
+        "responses": {
+          "200": { "description": "Daftar artikel publik berhasil dimuat" }
+        }
+      }
+    },
+    "/api/public/posts/{slug}": {
+      "get": {
+        "tags": ["Public"],
+        "summary": "Detail Artikel Publik berdasarkan Slug",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "type": "string" }
+        ],
+        "responses": {
+          "200": { "description": "Detail artikel berhasil dimuat" },
+          "404": { "description": "Artikel tidak ditemukan" }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Registrasi Akun Penulis Baru",
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/RegisterRequest" } }
+        ],
+        "responses": {
+          "201": { "description": "Registrasi berhasil" },
+          "400": { "description": "Validasi gagal atau akun sudah terdaftar" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login Pengguna & Penerbitan JWT",
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/LoginRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Login berhasil" },
+          "401": { "description": "Kredensial tidak valid" }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Logout Pengguna",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Logout berhasil" }
+        }
+      }
+    },
+    "/api/auth/profile": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Ambil Profil Penulis Login",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Profil berhasil dimuat" }
+        }
+      },
+      "put": {
+        "tags": ["Auth"],
+        "summary": "Perbarui Profil Penulis Login",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdateProfileRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Profil berhasil diperbarui" }
+        }
+      }
+    },
+    "/api/posts": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "Daftar Seluruh Artikel Milik Penulis Login",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "q", "in": "query", "type": "string" },
+          { "name": "category", "in": "query", "type": "string" },
+          { "name": "status", "in": "query", "type": "string", "description": "published atau draft" }
+        ],
+        "responses": {
+          "200": { "description": "Daftar artikel penulis berhasil dimuat" }
+        }
+      },
+      "post": {
+        "tags": ["Posts"],
+        "summary": "Buat Artikel Baru",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/CreatePostRequest" } }
+        ],
+        "responses": {
+          "201": { "description": "Artikel berhasil dibuat" }
+        }
+      }
+    },
+    "/api/posts/stats": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "Statistik Artikel Penulis (Total, Terbit, Draf)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Statistik berhasil dimuat" }
+        }
+      }
+    },
+    "/api/posts/{id}": {
+      "get": {
+        "tags": ["Posts"],
+        "summary": "Detail Artikel Milik Penulis berdasarkan ID",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Detail artikel berhasil dimuat" },
+          "404": { "description": "Artikel tidak ditemukan" }
+        }
+      },
+      "put": {
+        "tags": ["Posts"],
+        "summary": "Perbarui Artikel Milik Penulis",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "type": "integer" },
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UpdatePostRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Artikel berhasil diperbarui" }
+        }
+      },
+      "delete": {
+        "tags": ["Posts"],
+        "summary": "Hapus Artikel Milik Penulis",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Artikel berhasil dihapus" }
+        }
+      }
+    },
+    "/api/posts/{id}/toggle-publish": {
+      "patch": {
+        "tags": ["Posts"],
+        "summary": "Toggle Status Publikasi Artikel (Draf <-> Terbit)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Status publikasi berhasil diubah" }
+        }
+      }
+    },
+    "/api/posts/ai-generate": {
+      "post": {
+        "tags": ["AI"],
+        "summary": "Generate Draf Artikel Utuh via AI + Live Search Engine",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/GeneratePostRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "Draf artikel AI beserta sumber pencarian berhasil dihasilkan" },
+          "500": { "description": "Gagal menghasilkan artikel AI" }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Monitoring Daftar Pengguna & Statistik Artikel (Admin Only)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Daftar pengguna berhasil dimuat" },
+          "403": { "description": "Forbidden - Admin Only" }
+        }
+      }
+    },
+    "/api/admin/posts": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Monitoring Arsip Seluruh Artikel dari Semua Penulis (Admin Only)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Daftar seluruh artikel berhasil dimuat" },
+          "403": { "description": "Forbidden - Admin Only" }
+        }
+      }
+    },
+    "/api/admin/users/{id}/posts": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Ambil Seluruh Artikel Milik Pengguna Tertentu (Admin Only)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Daftar artikel pengguna berhasil dimuat" },
+          "404": { "description": "Pengguna tidak ditemukan" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "RegisterRequest": {
+      "type": "object",
+      "required": ["username", "email", "password"],
+      "properties": {
+        "username": { "type": "string", "example": "penulis_delcom" },
+        "email": { "type": "string", "example": "penulis@delcom.org" },
+        "password": { "type": "string", "example": "Password123!" }
+      }
+    },
+    "LoginRequest": {
+      "type": "object",
+      "required": ["username", "password"],
+      "properties": {
+        "username": { "type": "string", "example": "admin" },
+        "password": { "type": "string", "example": "admin" }
+      }
+    },
+    "UpdateProfileRequest": {
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" }
+      }
+    },
+    "CreatePostRequest": {
+      "type": "object",
+      "required": ["title", "content"],
+      "properties": {
+        "title": { "type": "string", "example": "Mengenal Arsitektur Microservices" },
+        "category": { "type": "string", "example": "Teknologi" },
+        "excerpt": { "type": "string", "example": "Ringkasan arsitektur modern." },
+        "content": { "type": "string", "example": "# Pendahuluan\n\nKonten lengkap dalam Markdown." },
+        "cover_image_path": { "type": "string", "example": "" },
+        "is_published": { "type": "boolean", "example": true }
+      }
+    },
+    "UpdatePostRequest": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "content": { "type": "string" },
+        "cover_image_path": { "type": "string" },
+        "is_published": { "type": "boolean" }
+      }
+    },
+    "GeneratePostRequest": {
+      "type": "object",
+      "required": ["topic"],
+      "properties": {
+        "topic": { "type": "string", "example": "Tren WebAssembly 2026" },
+        "category": { "type": "string", "example": "Teknologi" },
+        "include_web_search": { "type": "boolean", "example": true }
+      }
+    }
+  }
+}

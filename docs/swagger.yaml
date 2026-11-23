@@ -1,0 +1,152 @@
+swagger: "2.0"
+info:
+  title: Delcom Blog REST API
+  description: Dokumentasi RESTful API Backend Delcom Blog — Aplikasi Blog Multi-Tier & AI Generator dengan Integrasi Search Engine.
+  version: "1.0.0"
+  contact:
+    name: Delcom - Labs
+host: ""
+basePath: "/"
+schemes:
+  - http
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: "Format token: Bearer <token_jwt>"
+paths:
+  /api/public/categories:
+    get:
+      tags: [Public]
+      summary: Daftar Kategori Artikel Publik
+      responses:
+        "200":
+          description: Daftar kategori berhasil dimuat
+  /api/public/posts:
+    get:
+      tags: [Public]
+      summary: Daftar Artikel Terbit Publik
+      responses:
+        "200":
+          description: Daftar artikel publik berhasil dimuat
+  /api/public/posts/{slug}:
+    get:
+      tags: [Public]
+      summary: Detail Artikel Publik berdasarkan Slug
+      responses:
+        "200":
+          description: Detail artikel berhasil dimuat
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrasi Akun Penulis Baru
+      responses:
+        "201":
+          description: Registrasi berhasil
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login Pengguna & Penerbitan JWT
+      responses:
+        "200":
+          description: Login berhasil
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout Pengguna
+      responses:
+        "200":
+          description: Logout berhasil
+  /api/auth/profile:
+    get:
+      tags: [Auth]
+      summary: Ambil Profil Penulis Login
+      responses:
+        "200":
+          description: Profil berhasil dimuat
+    put:
+      tags: [Auth]
+      summary: Perbarui Profil Penulis Login
+      responses:
+        "200":
+          description: Profil berhasil diperbarui
+  /api/posts:
+    get:
+      tags: [Posts]
+      summary: Daftar Artikel Penulis Login
+      responses:
+        "200":
+          description: Daftar artikel penulis berhasil dimuat
+    post:
+      tags: [Posts]
+      summary: Buat Artikel Baru
+      responses:
+        "201":
+          description: Artikel berhasil dibuat
+  /api/posts/stats:
+    get:
+      tags: [Posts]
+      summary: Statistik Artikel Penulis
+      responses:
+        "200":
+          description: Statistik berhasil dimuat
+  /api/posts/{id}:
+    get:
+      tags: [Posts]
+      summary: Detail Artikel Penulis
+      responses:
+        "200":
+          description: Detail artikel berhasil dimuat
+    put:
+      tags: [Posts]
+      summary: Perbarui Artikel Penulis
+      responses:
+        "200":
+          description: Artikel berhasil diperbarui
+    delete:
+      tags: [Posts]
+      summary: Hapus Artikel Penulis
+      responses:
+        "200":
+          description: Artikel berhasil dihapus
+  /api/posts/{id}/toggle-publish:
+    patch:
+      tags: [Posts]
+      summary: Toggle Publikasi Artikel
+      responses:
+        "200":
+          description: Status publikasi berhasil diubah
+  /api/posts/ai-generate:
+    post:
+      tags: [AI]
+      summary: Generate Draf Artikel via AI + Search Engine
+      responses:
+        "200":
+          description: Draf artikel AI berhasil dihasilkan
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: Monitoring Daftar Pengguna (Admin Only)
+      responses:
+        "200":
+          description: Daftar pengguna berhasil dimuat
+  /api/admin/posts:
+    get:
+      tags: [Admin]
+      summary: Monitoring Arsip Seluruh Artikel (Admin Only)
+      responses:
+        "200":
+          description: Arsip seluruh artikel berhasil dimuat
+  /api/admin/users/{id}/posts:
+    get:
+      tags: [Admin]
+      summary: Artikel Pengguna Tertentu (Admin Only)
+      responses:
+        "200":
+          description: Daftar artikel pengguna berhasil dimuat
