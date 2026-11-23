@@ -46,7 +46,7 @@ type PostFilter struct {
 	Status   string
 }
 
-// AuthorSummary holds public author metadata attached to post responses.
+// AuthorSummary holds author metadata attached to internal/admin post responses.
 type AuthorSummary struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
@@ -54,11 +54,28 @@ type AuthorSummary struct {
 	Role     string `json:"role"`
 }
 
-// PostResponse represents a serialized blog article with reading time and author info.
+// PublicPostResponse represents a public-safe blog article without internal user_id or email.
+type PublicPostResponse struct {
+	ID             uint       `json:"id"`
+	Title          string     `json:"title"`
+	Slug           string     `json:"slug"`
+	Category       string     `json:"category"`
+	Excerpt        string     `json:"excerpt"`
+	Content        string     `json:"content"`
+	CoverImagePath string     `json:"cover_image_path"`
+	AuthorName     string     `json:"author_name"`
+	ReadingTime    int        `json:"reading_time"`
+	PublishedAt    *time.Time `json:"published_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// PostResponse represents a serialized blog article for author workspace and admin monitoring.
 type PostResponse struct {
 	ID             uint           `json:"id"`
 	UserID         uint           `json:"user_id"`
 	Author         *AuthorSummary `json:"author,omitempty"`
+	AuthorName     string         `json:"author_name"`
 	Title          string         `json:"title"`
 	Slug           string         `json:"slug"`
 	Category       string         `json:"category"`
@@ -74,9 +91,9 @@ type PostResponse struct {
 
 // PostStatsResponse represents the 3 author summary stat cards.
 type PostStatsResponse struct {
-	Total        int64 `json:"total"`
-	TotalTerbit  int64 `json:"total_terbit"`
-	BelumSelesai int64 `json:"belum_selesai"`
+	TotalArticles int64 `json:"total_articles"`
+	TotalSelesai  int64 `json:"total_selesai"`
+	BelumSelesai  int64 `json:"belum_selesai"`
 }
 
 // AdminUserSummary represents user metrics for the admin dashboard.
@@ -85,8 +102,8 @@ type AdminUserSummary struct {
 	Username       string    `json:"username"`
 	Email          string    `json:"email"`
 	Role           string    `json:"role"`
-	TotalPosts     int64     `json:"total_posts"`
-	PublishedPosts int64     `json:"published_posts"`
+	TotalArticles  int64     `json:"total_articles"`
+	TotalPublished int64     `json:"total_published"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -134,10 +151,43 @@ func buildExcerpt(excerpt, content string) string {
 	return plain
 }
 
+func resolveAuthorName(u *database.User) string {
+	if u != nil && u.Username != "" {
+		return u.Username
+	}
+	return "Delcom Author"
+}
+
+func toPublicPostResponse(p database.Post) PublicPostResponse {
+	return PublicPostResponse{
+		ID:             p.ID,
+		Title:          p.Title,
+		Slug:           p.Slug,
+		Category:       p.Category,
+		Excerpt:        p.Excerpt,
+		Content:        p.Content,
+		CoverImagePath: p.CoverImagePath,
+		AuthorName:     resolveAuthorName(p.User),
+		ReadingTime:    CalculateReadingTime(p.Content),
+		PublishedAt:    p.PublishedAt,
+		CreatedAt:      p.CreatedAt,
+		UpdatedAt:      p.UpdatedAt,
+	}
+}
+
+func toPublicPostResponses(posts []database.Post) []PublicPostResponse {
+	out := make([]PublicPostResponse, 0, len(posts))
+	for _, p := range posts {
+		out = append(out, toPublicPostResponse(p))
+	}
+	return out
+}
+
 func toPostResponse(p database.Post) PostResponse {
 	res := PostResponse{
 		ID:             p.ID,
 		UserID:         p.UserID,
+		AuthorName:     resolveAuthorName(p.User),
 		Title:          p.Title,
 		Slug:           p.Slug,
 		Category:       p.Category,

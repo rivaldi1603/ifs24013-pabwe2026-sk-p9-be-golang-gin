@@ -57,11 +57,13 @@ func TestAuthEndToEnd(t *testing.T) {
 	api := r.Group("/api")
 	h.RegisterRoutes(api, middleware.Auth("secret"))
 
+	// Validation fail
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(`{}`)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	regBody := `{"username":"penulis1","email":"penulis1@example.com","password":"Password123!"}`
+	// Register default member (invalid role forced to member)
+	regBody := `{"username":"penulis1","email":"penulis1@example.com","password":"Password123!","role":"super"}`
 	w = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(regBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -75,6 +77,17 @@ func TestAuthEndToEnd(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	token := regResp.Data.Token
 	assert.NotEmpty(t, token)
+	assert.Equal(t, "member", regResp.Data.User.Role)
+
+	// Register explicit admin role
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(`{"username":"admin2","email":"admin2@example.com","password":"Password123!","role":"admin"}`)))
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var adminResp struct {
+		Data AuthResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &adminResp))
+	assert.Equal(t, "admin", adminResp.Data.User.Role)
 
 	// Duplicate username & duplicate email
 	w = httptest.NewRecorder()
@@ -86,7 +99,7 @@ func TestAuthEndToEnd(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(dupEmail)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Login tests
+	// Login tests (missing fields, unknown, wrong password, by username, by email)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{}`)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -103,7 +116,11 @@ func TestAuthEndToEnd(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"username":"penulis1","password":"Password123!"}`)))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// FindByID miss + Profile & Update & Logout
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"username":"penulis1@example.com","password":"Password123!"}`)))
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// FindByID miss + Profile & Update (invalid email 400 + success) & Logout
 	_, err := repo.FindByID(9999)
 	assert.Error(t, err)
 
@@ -114,7 +131,7 @@ func TestAuthEndToEnd(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPut, "/api/auth/profile", bytes.NewBufferString(`{invalid`))
+	req = httptest.NewRequest(http.MethodPut, "/api/auth/profile", bytes.NewBufferString(`{"email":"bukan-email"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -178,6 +195,13 @@ func TestServiceAndHandlerErrors(t *testing.T) {
 	t.Run("Login errors", func(t *testing.T) {
 		svc := NewService(&mockRepo{findByUsernameFn: func(string) (*database.User, error) { return nil, dbErr }}, "secret")
 		_, err := svc.Login(LoginRequest{Username: "u", Password: "p"})
+		assert.ErrorIs(t, err, dbErr)
+
+		svc = NewService(&mockRepo{
+			findByUsernameFn: notFound,
+			findByEmailFn:    func(string) (*database.User, error) { return nil, dbErr },
+		}, "secret")
+		_, err = svc.Login(LoginRequest{Username: "e@e.com", Password: "p"})
 		assert.ErrorIs(t, err, dbErr)
 
 		hashed, err := generateHashFn([]byte("pass"), 4)

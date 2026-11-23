@@ -11,9 +11,10 @@ type RegisterRequest struct {
 	Username string `json:"username" binding:"required,min=3"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=6"`
+	Role     string `json:"role"`
 }
 
-// LoginRequest represents the user login payload.
+// LoginRequest represents the user login payload (username accepts username or email).
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -22,8 +23,8 @@ type LoginRequest struct {
 // UpdateProfileRequest represents the profile update payload.
 type UpdateProfileRequest struct {
 	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" binding:"omitempty,email"`
+	Password string `json:"password" binding:"omitempty,min=6"`
 }
 
 // UserProfileResponse represents public user profile information.

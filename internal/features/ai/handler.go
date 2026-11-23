@@ -32,7 +32,7 @@ func (h *Handler) GeneratePost(c *gin.Context) {
 
 	res, err := h.service.GeneratePost(c.Request.Context(), req)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to generate AI blog post: "+err.Error())
+		response.Error(c, http.StatusInternalServerError, "OpenAI failed to generate AI blog post: "+err.Error())
 		return
 	}
 

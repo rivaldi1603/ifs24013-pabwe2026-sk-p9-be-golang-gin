@@ -13,15 +13,15 @@ import (
 
 var (
 	ErrPostNotFound    = errors.New("post not found")
-	ErrUserNotFound    = errors.New("user not found")
+	ErrForbidden       = errors.New("forbidden: you do not own this post")
 	ErrInvalidCategory = errors.New("invalid category")
 )
 
 // Service defines business logic for Delcom Blog posts and admin monitoring.
 type Service interface {
 	GetCategories() []string
-	ListPublicPosts(filter PostFilter) ([]PostResponse, error)
-	GetPublicPostBySlug(slug string) (*PostResponse, error)
+	ListPublicPosts(filter PostFilter) ([]PublicPostResponse, error)
+	GetPublicPostBySlug(slug string) (*PublicPostResponse, error)
 
 	ListMyPosts(userID uint, filter PostFilter) ([]PostResponse, error)
 	CreatePost(userID uint, req CreatePostRequest) (*PostResponse, error)
@@ -51,15 +51,15 @@ func (s *service) GetCategories() []string {
 	return out
 }
 
-func (s *service) ListPublicPosts(filter PostFilter) ([]PostResponse, error) {
+func (s *service) ListPublicPosts(filter PostFilter) ([]PublicPostResponse, error) {
 	posts, err := s.repo.ListPublicPosts(filter)
 	if err != nil {
 		return nil, err
 	}
-	return toPostResponses(posts), nil
+	return toPublicPostResponses(posts), nil
 }
 
-func (s *service) GetPublicPostBySlug(slug string) (*PostResponse, error) {
+func (s *service) GetPublicPostBySlug(slug string) (*PublicPostResponse, error) {
 	p, err := s.repo.FindPublicPostBySlug(slug)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -67,7 +67,7 @@ func (s *service) GetPublicPostBySlug(slug string) (*PostResponse, error) {
 		}
 		return nil, err
 	}
-	res := toPostResponse(*p)
+	res := toPublicPostResponse(*p)
 	return &res, nil
 }
 
@@ -92,6 +92,20 @@ func (s *service) generateUniqueSlug(title string, excludeID uint) (string, erro
 		}
 		candidate = fmt.Sprintf("%s-%d", base, suffix)
 	}
+}
+
+func (s *service) findOwnedPost(id, userID uint) (*database.Post, error) {
+	p, err := s.repo.FindPostByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+		return nil, err
+	}
+	if p.UserID != userID {
+		return nil, ErrForbidden
+	}
+	return p, nil
 }
 
 func (s *service) CreatePost(userID uint, req CreatePostRequest) (*PostResponse, error) {
@@ -134,11 +148,8 @@ func (s *service) CreatePost(userID uint, req CreatePostRequest) (*PostResponse,
 }
 
 func (s *service) GetMyPost(id, userID uint) (*PostResponse, error) {
-	p, err := s.repo.FindPostByIDAndUser(id, userID)
+	p, err := s.findOwnedPost(id, userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrPostNotFound
-		}
 		return nil, err
 	}
 	res := toPostResponse(*p)
@@ -146,11 +157,8 @@ func (s *service) GetMyPost(id, userID uint) (*PostResponse, error) {
 }
 
 func (s *service) UpdatePost(id, userID uint, req UpdatePostRequest) (*PostResponse, error) {
-	p, err := s.repo.FindPostByIDAndUser(id, userID)
+	p, err := s.findOwnedPost(id, userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrPostNotFound
-		}
 		return nil, err
 	}
 
@@ -195,11 +203,8 @@ func (s *service) UpdatePost(id, userID uint, req UpdatePostRequest) (*PostRespo
 }
 
 func (s *service) TogglePublish(id, userID uint) (*PostResponse, error) {
-	p, err := s.repo.FindPostByIDAndUser(id, userID)
+	p, err := s.findOwnedPost(id, userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrPostNotFound
-		}
 		return nil, err
 	}
 
@@ -219,11 +224,8 @@ func (s *service) TogglePublish(id, userID uint) (*PostResponse, error) {
 }
 
 func (s *service) DeletePost(id, userID uint) error {
-	p, err := s.repo.FindPostByIDAndUser(id, userID)
+	p, err := s.findOwnedPost(id, userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrPostNotFound
-		}
 		return err
 	}
 	return s.repo.DeletePost(p)
@@ -246,12 +248,6 @@ func (s *service) AdminListPosts() ([]PostResponse, error) {
 }
 
 func (s *service) AdminGetUserPosts(userID uint) ([]PostResponse, error) {
-	if _, err := s.repo.FindUserByID(userID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrUserNotFound
-		}
-		return nil, err
-	}
 	posts, err := s.repo.ListAllPostsByUser(userID)
 	if err != nil {
 		return nil, err

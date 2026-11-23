@@ -25,7 +25,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup, authMiddleware gin.Handler
 	{
 		authGroup.POST("/register", h.Register)
 		authGroup.POST("/login", h.Login)
-		authGroup.POST("/logout", authMiddleware, h.Logout)
+		authGroup.POST("/logout", h.Logout)
 		authGroup.GET("/profile", authMiddleware, h.GetProfile)
 		authGroup.PUT("/profile", authMiddleware, h.UpdateProfile)
 	}

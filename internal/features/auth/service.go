@@ -64,11 +64,16 @@ func (s *service) Register(req RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	role := strings.TrimSpace(req.Role)
+	if role != "admin" && role != "member" {
+		role = "member"
+	}
+
 	user := &database.User{
 		Username: strings.TrimSpace(req.Username),
 		Email:    strings.TrimSpace(req.Email),
 		Password: string(hashed),
-		Role:     "member",
+		Role:     role,
 	}
 
 	if err := s.repo.Create(user); err != nil {
@@ -87,12 +92,19 @@ func (s *service) Register(req RegisterRequest) (*AuthResponse, error) {
 }
 
 func (s *service) Login(req LoginRequest) (*AuthResponse, error) {
-	user, err := s.repo.FindByUsername(strings.TrimSpace(req.Username))
+	ident := strings.TrimSpace(req.Username)
+	user, err := s.repo.FindByUsername(ident)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidCredentials
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
 		}
-		return nil, err
+		user, err = s.repo.FindByEmail(ident)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrInvalidCredentials
+			}
+			return nil, err
+		}
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {

@@ -148,6 +148,10 @@ func (h *Handler) GetMyPost(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "Post not found")
 			return
 		}
+		if errors.Is(err, ErrForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, "Failed to load post")
 		return
 	}
@@ -169,6 +173,10 @@ func (h *Handler) UpdatePost(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrPostNotFound) {
 			response.Fail(c, http.StatusNotFound, "Post not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
 			return
 		}
 		if errors.Is(err, ErrInvalidCategory) {
@@ -193,6 +201,10 @@ func (h *Handler) TogglePublish(c *gin.Context) {
 			response.Fail(c, http.StatusNotFound, "Post not found")
 			return
 		}
+		if errors.Is(err, ErrForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, "Failed to toggle publish status")
 		return
 	}
@@ -208,6 +220,10 @@ func (h *Handler) DeletePost(c *gin.Context) {
 	if err := h.service.DeletePost(id, userID); err != nil {
 		if errors.Is(err, ErrPostNotFound) {
 			response.Fail(c, http.StatusNotFound, "Post not found")
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			response.Fail(c, http.StatusForbidden, err.Error())
 			return
 		}
 		response.Error(c, http.StatusInternalServerError, "Failed to delete post")
@@ -241,10 +257,6 @@ func (h *Handler) AdminGetUserPosts(c *gin.Context) {
 	}
 	posts, err := h.service.AdminGetUserPosts(id)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			response.Fail(c, http.StatusNotFound, "User not found")
-			return
-		}
 		response.Error(c, http.StatusInternalServerError, "Failed to load user posts")
 		return
 	}

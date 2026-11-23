@@ -15,7 +15,7 @@ type Repository interface {
 	SlugExists(slug string, excludeID uint) (bool, error)
 
 	ListPostsByUser(userID uint, filter PostFilter) ([]database.Post, error)
-	FindPostByIDAndUser(id, userID uint) (*database.Post, error)
+	FindPostByID(id uint) (*database.Post, error)
 	CreatePost(post *database.Post) error
 	UpdatePost(post *database.Post) error
 	DeletePost(post *database.Post) error
@@ -23,7 +23,6 @@ type Repository interface {
 
 	ListAllUsersWithStats() ([]AdminUserSummary, error)
 	ListAllPosts() ([]database.Post, error)
-	FindUserByID(userID uint) (*database.User, error)
 	ListAllPostsByUser(userID uint) ([]database.Post, error)
 }
 
@@ -89,9 +88,9 @@ func (r *gormRepository) ListPostsByUser(userID uint, filter PostFilter) ([]data
 	return posts, err
 }
 
-func (r *gormRepository) FindPostByIDAndUser(id, userID uint) (*database.Post, error) {
+func (r *gormRepository) FindPostByID(id uint) (*database.Post, error) {
 	var p database.Post
-	err := r.db.Preload("User").Where("id = ? AND user_id = ?", id, userID).First(&p).Error
+	err := r.db.Preload("User").First(&p, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +122,9 @@ func (r *gormRepository) GetStatsByUser(userID uint) (*PostStatsResponse, error)
 		return nil, err
 	}
 	return &PostStatsResponse{
-		Total:        total,
-		TotalTerbit:  published,
-		BelumSelesai: total - published,
+		TotalArticles: total,
+		TotalSelesai:  published,
+		BelumSelesai:  total - published,
 	}, nil
 }
 
@@ -148,8 +147,8 @@ func (r *gormRepository) ListAllUsersWithStats() ([]AdminUserSummary, error) {
 			Username:       u.Username,
 			Email:          u.Email,
 			Role:           u.Role,
-			TotalPosts:     total,
-			PublishedPosts: published,
+			TotalArticles:  total,
+			TotalPublished: published,
 			CreatedAt:      u.CreatedAt,
 			UpdatedAt:      u.UpdatedAt,
 		})
@@ -161,14 +160,6 @@ func (r *gormRepository) ListAllPosts() ([]database.Post, error) {
 	var posts []database.Post
 	err := r.db.Preload("User").Order("id desc").Find(&posts).Error
 	return posts, err
-}
-
-func (r *gormRepository) FindUserByID(userID uint) (*database.User, error) {
-	var user database.User
-	if err := r.db.First(&user, userID).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
 }
 
 func (r *gormRepository) ListAllPostsByUser(userID uint) ([]database.Post, error) {

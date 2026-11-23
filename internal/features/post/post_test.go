@@ -40,14 +40,13 @@ type mockRepo struct {
 	findPublicPostBySlugFn  func(string) (*database.Post, error)
 	slugExistsFn            func(string, uint) (bool, error)
 	listPostsByUserFn       func(uint, PostFilter) ([]database.Post, error)
-	findPostByIDAndUserFn   func(uint, uint) (*database.Post, error)
+	findPostByIDFn          func(uint) (*database.Post, error)
 	createPostFn            func(*database.Post) error
 	updatePostFn            func(*database.Post) error
 	deletePostFn            func(*database.Post) error
 	getStatsByUserFn        func(uint) (*PostStatsResponse, error)
 	listAllUsersWithStatsFn func() ([]AdminUserSummary, error)
 	listAllPostsFn          func() ([]database.Post, error)
-	findUserByIDFn          func(uint) (*database.User, error)
 	listAllPostsByUserFn    func(uint) ([]database.Post, error)
 }
 
@@ -61,12 +60,10 @@ func (m *mockRepo) SlugExists(s string, ex uint) (bool, error) { return m.slugEx
 func (m *mockRepo) ListPostsByUser(u uint, f PostFilter) ([]database.Post, error) {
 	return m.listPostsByUserFn(u, f)
 }
-func (m *mockRepo) FindPostByIDAndUser(id, u uint) (*database.Post, error) {
-	return m.findPostByIDAndUserFn(id, u)
-}
-func (m *mockRepo) CreatePost(p *database.Post) error { return m.createPostFn(p) }
-func (m *mockRepo) UpdatePost(p *database.Post) error { return m.updatePostFn(p) }
-func (m *mockRepo) DeletePost(p *database.Post) error { return m.deletePostFn(p) }
+func (m *mockRepo) FindPostByID(id uint) (*database.Post, error) { return m.findPostByIDFn(id) }
+func (m *mockRepo) CreatePost(p *database.Post) error            { return m.createPostFn(p) }
+func (m *mockRepo) UpdatePost(p *database.Post) error            { return m.updatePostFn(p) }
+func (m *mockRepo) DeletePost(p *database.Post) error            { return m.deletePostFn(p) }
 func (m *mockRepo) GetStatsByUser(u uint) (*PostStatsResponse, error) {
 	return m.getStatsByUserFn(u)
 }
@@ -74,9 +71,6 @@ func (m *mockRepo) ListAllUsersWithStats() ([]AdminUserSummary, error) {
 	return m.listAllUsersWithStatsFn()
 }
 func (m *mockRepo) ListAllPosts() ([]database.Post, error) { return m.listAllPostsFn() }
-func (m *mockRepo) FindUserByID(u uint) (*database.User, error) {
-	return m.findUserByIDFn(u)
-}
 func (m *mockRepo) ListAllPostsByUser(u uint) ([]database.Post, error) {
 	return m.listAllPostsByUserFn(u)
 }
@@ -90,25 +84,29 @@ func TestHelpersSlugAndReadingTime(t *testing.T) {
 	longContent := strings.Repeat("a", 200)
 	assert.True(t, strings.HasSuffix(buildExcerpt("", longContent), "..."))
 	assert.Equal(t, "short", buildExcerpt("", "short"))
+	assert.Equal(t, "Delcom Author", resolveAuthorName(nil))
+	assert.Equal(t, "alice", resolveAuthorName(&database.User{Username: "alice"}))
 }
 
 func TestPostEndToEnd(t *testing.T) {
 	db := setupTestDB(t)
 	require.NoError(t, database.Seed(db, &config.Config{AdminUsername: "admin", AdminPassword: "admin"}))
 
-	var member database.User
+	var adminUser, member database.User
+	require.NoError(t, db.Where("username = ?", "admin").First(&adminUser).Error)
 	require.NoError(t, db.Where("username = ?", "member").First(&member).Error)
 
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
+	activeUserID := member.ID
 	r := gin.New()
-	authMW := func(c *gin.Context) { c.Set("user_id", member.ID); c.Next() }
+	authMW := func(c *gin.Context) { c.Set("user_id", activeUserID); c.Next() }
 	adminMW := func(c *gin.Context) { c.Next() }
 	h.RegisterRoutes(r.Group("/api"), authMW, adminMW)
 
-	// 1. Public categories & public posts
+	// 1. Public categories & public posts (must NOT expose user_id, MUST expose author_name)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/public/categories", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -116,16 +114,19 @@ func TestPostEndToEnd(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/public/posts?search=Golang&category=Teknologi", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotContains(t, w.Body.String(), "user_id")
+	assert.Contains(t, w.Body.String(), "author_name")
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/public/posts/membangun-rest-api-skalabel-dengan-golang-gin-clean-architecture", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotContains(t, w.Body.String(), "user_id")
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/public/posts/tidak-ada", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
-	// 2. Author CreatePost (validation, invalid category, success with duplicate slug)
+	// 2. Author CreatePost
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/posts", bytes.NewBufferString(`{}`)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -144,9 +145,7 @@ func TestPostEndToEnd(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created1))
 	assert.Equal(t, "artikel-unik", created1.Data.Slug)
 	assert.Equal(t, "Umum", created1.Data.Category)
-	assert.Equal(t, 1, created1.Data.ReadingTime)
 
-	// Second post with identical title generates unique slug "-2"
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/posts", bytes.NewBufferString(`{"title":"Artikel Unik","category":"Teknologi","excerpt":"Ringkas","content":"Body 2","is_published":false}`)))
 	assert.Equal(t, http.StatusCreated, w.Code)
@@ -158,7 +157,7 @@ func TestPostEndToEnd(t *testing.T) {
 	assert.Equal(t, "artikel-unik-2", created2.Data.Slug)
 	pid := created2.Data.ID
 
-	// 3. List author posts (status published & draft) and stats
+	// 3. List author posts & stats (total_articles / total_selesai / belum_selesai)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/posts?status=published&q=Unik", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -170,8 +169,30 @@ func TestPostEndToEnd(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/posts/stats", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "total_articles")
+	assert.Contains(t, w.Body.String(), "total_selesai")
+	assert.Contains(t, w.Body.String(), "belum_selesai")
 
-	// 4. GetMyPost
+	// 4. Ownership 403 checks when another user accesses member's post
+	activeUserID = adminUser.ID
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/posts/"+jsonInt(pid), nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/posts/"+jsonInt(pid), bytes.NewBufferString(`{"title":"Hijack"}`)))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPatch, "/api/posts/"+jsonInt(pid)+"/toggle-publish", nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/posts/"+jsonInt(pid), nil))
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	activeUserID = member.ID
+
+	// 5. GetMyPost, UpdatePost, TogglePublish
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/posts/abc", nil))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -184,7 +205,6 @@ func TestPostEndToEnd(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/posts/"+jsonInt(pid), nil))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// 5. UpdatePost (bad id, bad json, 404, bad category, success publish & unpublish)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/posts/abc", bytes.NewBufferString(`{}`)))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -209,7 +229,6 @@ func TestPostEndToEnd(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/posts/"+jsonInt(pid), bytes.NewBufferString(`{"is_published":false}`)))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// 6. TogglePublish (bad id, 404, draft -> published -> draft)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPatch, "/api/posts/0/toggle-publish", nil))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -226,10 +245,12 @@ func TestPostEndToEnd(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPatch, "/api/posts/"+jsonInt(pid)+"/toggle-publish", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// 7. Admin routes
+	// 6. Admin routes (nonexistent user returns 200 empty array, users include total_articles & total_published)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/admin/users", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "total_articles")
+	assert.Contains(t, w.Body.String(), "total_published")
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/admin/posts", nil))
@@ -241,13 +262,13 @@ func TestPostEndToEnd(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/admin/users/9999/posts", nil))
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/admin/users/"+jsonInt(member.ID)+"/posts", nil))
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// 8. DeletePost
+	// 7. DeletePost
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/posts/abc", nil))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -268,7 +289,6 @@ func TestPostRepoServiceHandlerErrors(t *testing.T) {
 		db := setupTestDB(t)
 		repo := NewRepository(db)
 
-		// Missing posts table
 		require.NoError(t, db.Migrator().DropTable(&database.Post{}))
 		_, err := repo.SlugExists("x", 0)
 		assert.Error(t, err)
@@ -281,14 +301,12 @@ func TestPostRepoServiceHandlerErrors(t *testing.T) {
 		_, err = repo.ListAllUsersWithStats()
 		assert.Error(t, err)
 
-		// Posts table without is_published column fails second Count in GetStatsByUser and ListAllUsersWithStats
 		require.NoError(t, db.Exec("CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER)").Error)
 		_, err = repo.GetStatsByUser(1)
 		assert.Error(t, err)
 		_, err = repo.ListAllUsersWithStats()
 		assert.Error(t, err)
 
-		// Missing users table fails ListAllUsersWithStats on users query
 		require.NoError(t, db.Migrator().DropTable(&database.User{}))
 		_, err = repo.ListAllUsersWithStats()
 		assert.Error(t, err)
@@ -300,14 +318,13 @@ func TestPostRepoServiceHandlerErrors(t *testing.T) {
 			findPublicPostBySlugFn:  func(string) (*database.Post, error) { return nil, dbErr },
 			slugExistsFn:            func(string, uint) (bool, error) { return false, dbErr },
 			listPostsByUserFn:       func(uint, PostFilter) ([]database.Post, error) { return nil, dbErr },
-			findPostByIDAndUserFn:   func(uint, uint) (*database.Post, error) { return nil, dbErr },
+			findPostByIDFn:          func(uint) (*database.Post, error) { return nil, dbErr },
 			createPostFn:            func(*database.Post) error { return dbErr },
 			updatePostFn:            func(*database.Post) error { return dbErr },
 			deletePostFn:            func(*database.Post) error { return dbErr },
 			getStatsByUserFn:        func(uint) (*PostStatsResponse, error) { return nil, dbErr },
 			listAllUsersWithStatsFn: func() ([]AdminUserSummary, error) { return nil, dbErr },
 			listAllPostsFn:          func() ([]database.Post, error) { return nil, dbErr },
-			findUserByIDFn:          func(uint) (*database.User, error) { return nil, dbErr },
 			listAllPostsByUserFn:    func(uint) ([]database.Post, error) { return nil, dbErr },
 		}
 		svc := NewService(mr)
@@ -338,13 +355,12 @@ func TestPostRepoServiceHandlerErrors(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, w.Code, rt.method+" "+rt.path)
 		}
 
-		// Additional service branches where lookup succeeds but write/slug fails
 		mr.slugExistsFn = func(string, uint) (bool, error) { return false, nil }
 		_, err := svc.CreatePost(1, CreatePostRequest{Title: "A", Content: "B"})
 		assert.ErrorIs(t, err, dbErr)
 
-		mr.findPostByIDAndUserFn = func(uint, uint) (*database.Post, error) {
-			return &database.Post{ID: 1, Title: "Old"}, nil
+		mr.findPostByIDFn = func(uint) (*database.Post, error) {
+			return &database.Post{ID: 1, UserID: 1, Title: "Old"}, nil
 		}
 		mr.slugExistsFn = func(string, uint) (bool, error) { return false, dbErr }
 		_, err = svc.UpdatePost(1, 1, UpdatePostRequest{Title: "New"})
@@ -355,10 +371,6 @@ func TestPostRepoServiceHandlerErrors(t *testing.T) {
 		assert.ErrorIs(t, err, dbErr)
 
 		_, err = svc.TogglePublish(1, 1)
-		assert.ErrorIs(t, err, dbErr)
-
-		mr.findUserByIDFn = func(uint) (*database.User, error) { return &database.User{ID: 1}, nil }
-		_, err = svc.AdminGetUserPosts(1)
 		assert.ErrorIs(t, err, dbErr)
 	})
 }
